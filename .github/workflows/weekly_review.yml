@@ -44,6 +44,7 @@ jobs:
       - name: Run Weekly Synthesis
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: "openai/gpt-oss-120b"
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DATABASE_ID_DAILY_BRIEFINGS: ${{ secrets.NOTION_DATABASE_ID_DAILY_BRIEFINGS }}
           NOTION_DATABASE_ID_CONCEPT_LIBRARY: ${{ secrets.NOTION_DATABASE_ID_CONCEPT_LIBRARY }}

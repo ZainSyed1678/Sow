@@ -12,10 +12,25 @@ on:
         type: boolean
         default: false
       topic:
-        description: 'Research topic override'
+        description: 'Research topic override (e.g. ai_ml, robotics, quantum_ml)'
         required: false
         type: string
         default: 'ai_ml'
+      custom_url:
+        description: 'Custom URL to synthesize directly (leave empty for automated collection)'
+        required: false
+        type: string
+        default: ''
+      custom_title:
+        description: 'Custom title for the input URL (leave empty for automated collection)'
+        required: false
+        type: string
+        default: ''
+      min_score:
+        description: 'Relevance threshold (default: 0.40)'
+        required: false
+        type: string
+        default: '0.40'
 
 jobs:
   research-and-publish:
@@ -46,9 +61,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      - name: Validate GitHub Secrets (Live Mode)
+        env:
+          IS_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          DB_DAILY: ${{ secrets.NOTION_DATABASE_ID_DAILY_BRIEFINGS }}
+          DB_CONCEPT: ${{ secrets.NOTION_DATABASE_ID_CONCEPT_LIBRARY }}
+          DB_PAPERS: ${{ secrets.NOTION_DATABASE_ID_RESEARCH_PAPERS }}
+          DB_TOOLS: ${{ secrets.NOTION_DATABASE_ID_TOOLS_FRAMEWORKS }}
+          DB_WEEKLY: ${{ secrets.NOTION_DATABASE_ID_WEEKLY_REVIEWS }}
+        run: |
+          if [ "$IS_DRY_RUN" != "true" ]; then
+            MISSING=""
+            [ -z "$GROQ_API_KEY" ] && MISSING="$MISSING GROQ_API_KEY"
+            [ -z "$NOTION_API_KEY" ] && MISSING="$MISSING NOTION_API_KEY"
+            [ -z "$DB_DAILY" ] && MISSING="$MISSING NOTION_DATABASE_ID_DAILY_BRIEFINGS"
+            [ -z "$DB_CONCEPT" ] && MISSING="$MISSING NOTION_DATABASE_ID_CONCEPT_LIBRARY"
+            [ -z "$DB_PAPERS" ] && MISSING="$MISSING NOTION_DATABASE_ID_RESEARCH_PAPERS"
+            [ -z "$DB_TOOLS" ] && MISSING="$MISSING NOTION_DATABASE_ID_TOOLS_FRAMEWORKS"
+            [ -z "$DB_WEEKLY" ] && MISSING="$MISSING NOTION_DATABASE_ID_WEEKLY_REVIEWS"
+            if [ -n "$MISSING" ]; then
+              echo "::error::Missing required repository secrets: $MISSING"
+              echo "Please navigate to: Repo Settings -> Secrets and variables -> Actions and add these secrets."
+              exit 1
+            fi
+          fi
+
       - name: Run Daily Research Pipeline
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: "openai/gpt-oss-120b"
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DATABASE_ID_DAILY_BRIEFINGS: ${{ secrets.NOTION_DATABASE_ID_DAILY_BRIEFINGS }}
           NOTION_DATABASE_ID_CONCEPT_LIBRARY: ${{ secrets.NOTION_DATABASE_ID_CONCEPT_LIBRARY }}
@@ -58,8 +101,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
           LOG_LEVEL: "INFO"
         run: |
+          CMD_ARGS=""
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python -m ai_ml_notion_researcher.main --dry-run --topic "${{ github.event.inputs.topic || 'ai_ml' }}"
+            CMD_ARGS="--dry-run"
           else
-            python -m ai_ml_notion_researcher.main --live --topic "${{ github.event.inputs.topic || 'ai_ml' }}"
+            CMD_ARGS="--live"
           fi
+
+          if [ -n "${{ github.event.inputs.topic }}" ]; then
+            CMD_ARGS="$CMD_ARGS --topic '${{ github.event.inputs.topic }}'"
+          fi
+
+          if [ -n "${{ github.event.inputs.min_score }}" ]; then
+            CMD_ARGS="$CMD_ARGS --min-score ${{ github.event.inputs.min_score }}"
+          fi
+
+          if [ -n "${{ github.event.inputs.custom_url }}" ]; then
+            CMD_ARGS="$CMD_ARGS --custom-url '${{ github.event.inputs.custom_url }}'"
+          fi
+
+          if [ -n "${{ github.event.inputs.custom_title }}" ]; then
+            CMD_ARGS="$CMD_ARGS --custom-title '${{ github.event.inputs.custom_title }}'"
+          fi
+
+          echo "Executing: python -m ai_ml_notion_researcher.main $CMD_ARGS"
+          python -m ai_ml_notion_researcher.main $CMD_ARGS
