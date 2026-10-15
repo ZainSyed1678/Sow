@@ -122,10 +122,21 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
+def _clean_notion_id(raw_id: str | None) -> str:
+    """Extracts and normalizes Notion database ID by removing query params and dashes."""
+    if not raw_id:
+        return ""
+    val = raw_id.split("?")[0].replace("-", "").strip()
+    if "/" in val:
+        val = val.rstrip("/").split("/")[-1]
+    return val
+
+
 def load_config(
     project_root: Path | None = None,
     settings_file: str = "config/settings.yaml",
     sources_file: str = "config/sources.yaml",
+    load_env: bool = True,
 ) -> AppConfig:
     """Loads configuration by merging YAML files and environment variables.
 
@@ -135,12 +146,13 @@ def load_config(
         # Default to finding project root relative to this file
         project_root = Path(__file__).resolve().parent.parent.parent
 
-    # Load .env file if present
-    env_path = project_root / ".env"
-    if env_path.is_file():
-        load_dotenv(dotenv_path=env_path)
-    else:
-        load_dotenv()
+    # Load .env file if enabled and present
+    if load_env:
+        env_path = project_root / ".env"
+        if env_path.is_file():
+            load_dotenv(dotenv_path=env_path)
+        else:
+            load_dotenv()
 
     settings_data = _load_yaml(project_root / settings_file)
     sources_data = _load_yaml(project_root / sources_file)
@@ -185,11 +197,11 @@ def load_config(
     notion_api_key = os.getenv("NOTION_API_KEY")
 
     database_ids: dict[NotionDatabaseType, str] = {
-        NotionDatabaseType.DAILY_BRIEFINGS: os.getenv("NOTION_DATABASE_ID_DAILY_BRIEFINGS", ""),
-        NotionDatabaseType.CONCEPT_LIBRARY: os.getenv("NOTION_DATABASE_ID_CONCEPT_LIBRARY", ""),
-        NotionDatabaseType.RESEARCH_PAPERS: os.getenv("NOTION_DATABASE_ID_RESEARCH_PAPERS", ""),
-        NotionDatabaseType.TOOLS_FRAMEWORKS: os.getenv("NOTION_DATABASE_ID_TOOLS_FRAMEWORKS", ""),
-        NotionDatabaseType.WEEKLY_REVIEWS: os.getenv("NOTION_DATABASE_ID_WEEKLY_REVIEWS", ""),
+        NotionDatabaseType.DAILY_BRIEFINGS: _clean_notion_id(os.getenv("NOTION_DATABASE_ID_DAILY_BRIEFINGS", "")),
+        NotionDatabaseType.CONCEPT_LIBRARY: _clean_notion_id(os.getenv("NOTION_DATABASE_ID_CONCEPT_LIBRARY", "")),
+        NotionDatabaseType.RESEARCH_PAPERS: _clean_notion_id(os.getenv("NOTION_DATABASE_ID_RESEARCH_PAPERS", "")),
+        NotionDatabaseType.TOOLS_FRAMEWORKS: _clean_notion_id(os.getenv("NOTION_DATABASE_ID_TOOLS_FRAMEWORKS", "")),
+        NotionDatabaseType.WEEKLY_REVIEWS: _clean_notion_id(os.getenv("NOTION_DATABASE_ID_WEEKLY_REVIEWS", "")),
     }
 
     notion_cfg = NotionConfig(
