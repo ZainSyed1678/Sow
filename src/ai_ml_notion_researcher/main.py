@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ai_ml_notion_researcher.config import load_config
 from ai_ml_notion_researcher.logging_utils import get_logger, setup_logging
+from ai_ml_notion_researcher.models import NotionDatabaseType
 from ai_ml_notion_researcher.pipeline import ResearchPipeline
 
 logger = get_logger("main")
@@ -18,6 +19,17 @@ def main() -> int:
     parser.add_argument("--live", action="store_true", help="Publish directly to Notion (requires valid .env)")
     parser.add_argument("--weekly", action="store_true", help="Run weekly review synthesis instead of daily research")
     parser.add_argument("--topic", type=str, default=None, help="Research topic (default: ai_ml)")
+    parser.add_argument("--min-score", type=float, default=None, help="Minimum relevance score threshold (0.0 to 1.0)")
+    parser.add_argument("--custom-url", type=str, default=None, help="Directly generate a note for a custom URL")
+    parser.add_argument("--custom-title", type=str, default=None, help="Title for the custom input item")
+    parser.add_argument("--custom-text", type=str, default="", help="Optional abstract or text for custom input")
+    parser.add_argument(
+        "--custom-db",
+        type=str,
+        default=None,
+        choices=[db.value for db in NotionDatabaseType],
+        help="Target database for custom input",
+    )
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level")
     parser.add_argument("--json-logs", action="store_true", help="Output logs in JSON format")
 
@@ -31,6 +43,9 @@ def main() -> int:
 
     if args.topic:
         config.topic = args.topic
+
+    if args.min_score is not None:
+        config.pipeline.min_relevance_score = args.min_score
 
     # Determine dry-run status:
     # 1. If --dry-run is passed -> True
@@ -62,11 +77,26 @@ def main() -> int:
 
     pipeline = ResearchPipeline(config=config)
 
-    if args.weekly:
+    if args.custom_url or args.custom_title:
+        url = args.custom_url or f"https://custom-entry.local/{args.custom_title.lower().replace(' ', '-')}"
+        title = args.custom_title or args.custom_url
+        logger.info(f"Processing direct custom input note for '{title}'...")
+        target_db = NotionDatabaseType(args.custom_db) if args.custom_db else None
+        stats = pipeline.run_custom_item(
+            title=title,
+            url=url,
+            text=args.custom_text,
+            target_database=target_db,
+            dry_run=dry_run,
+        )
+    elif args.weekly:
         logger.info("Starting Weekly Review synthesis...")
         stats = pipeline.run_weekly_review(dry_run=dry_run)
     else:
-        logger.info("Starting Daily Research run...")
+        logger.info(
+            f"Starting Daily Research run (topic: {config.topic}, "
+            f"min_relevance_score: {config.pipeline.min_relevance_score:.2f})..."
+        )
         stats = pipeline.run(dry_run=dry_run)
 
     print("\n" + "=" * 60)

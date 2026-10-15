@@ -16,6 +16,7 @@ class SourceType(StrEnum):
     ARXIV = "arxiv"
     RSS = "rss"
     GITHUB = "github"
+    CUSTOM = "custom"
 
 
 class NotionDatabaseType(StrEnum):

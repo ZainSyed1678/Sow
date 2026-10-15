@@ -87,5 +87,20 @@ def test_score_and_classify_threshold():
         url="https://example.com/noise",
         raw_text="The office is moving to a new building next week.",
     )
-    # Below min_score=0.65 threshold
-    assert score_and_classify(low_quality_item, min_score=0.65) is None
+    # Below min_score=0.40 threshold (scores 0.25)
+    assert score_and_classify(low_quality_item, min_score=0.40) is None
+
+
+def test_custom_topic_scoring():
+    robotics_paper = RawItem(
+        id="robotics-1",
+        source_type=SourceType.ARXIV,
+        title="Quadruped Robot Locomotion via Vision-Guided Reinforcement Learning",
+        url="https://arxiv.org/abs/2401.99999",
+        raw_text="We propose an end-to-end framework for quadruped robot traversal over challenging terrain.",
+    )
+    classified = score_and_classify(robotics_paper, min_score=0.40, topic="robotics")
+    assert classified is not None
+    assert classified.relevance_score >= 0.50
+    assert "Robotics" in classified.topics
+    assert classified.target_database == NotionDatabaseType.RESEARCH_PAPERS

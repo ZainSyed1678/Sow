@@ -10,11 +10,19 @@ from ai_ml_notion_researcher.llm.generator import NoteGenerator
 from ai_ml_notion_researcher.llm.groq_client import GroqClient
 from ai_ml_notion_researcher.logging_utils import get_logger
 from ai_ml_notion_researcher.models import (
+    ClassifiedItem,
     EducationalNote,
     ExecutionStats,
     NotionDatabaseType,
+    RawItem,
+    SourceType,
 )
 from ai_ml_notion_researcher.notion.client import NotionClient
+from ai_ml_notion_researcher.processing.scorer import (
+    classify_database,
+    extract_matched_topics,
+    score_and_classify,
+)
 from ai_ml_notion_researcher.storage.sqlite_store import SQLiteStore
 
 logger = get_logger("pipeline")
@@ -220,4 +228,116 @@ class ResearchPipeline:
             stats.status = "failed"
 
         stats.completed_at = datetime.now(UTC)
+        return stats
+
+    def run_custom_item(
+        self,
+        title: str,
+        url: str,
+        text: str = "",
+        target_database: NotionDatabaseType | None = None,
+        dry_run: bool | None = None,
+    ) -> ExecutionStats:
+        """Synthesizes and publishes an educational note for a direct custom input item."""
+        effective_dry_run = self.config.pipeline.dry_run if dry_run is None else dry_run
+        run_id = f"custom-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+
+        stats = ExecutionStats(
+            run_id=run_id,
+            started_at=datetime.now(UTC),
+            dry_run=effective_dry_run,
+        )
+
+        logger.info(f"=== Starting Custom Item Pipeline [{run_id}] | Dry-Run: {effective_dry_run} ===")
+
+        metadata = {}
+        if target_database:
+            metadata["target_database"] = target_database.value
+
+        raw_item = RawItem(
+            id=RawItem.make_id(SourceType.CUSTOM, url),
+            source_type=SourceType.CUSTOM,
+            title=title,
+            url=url,
+            raw_text=text or title,
+            metadata=metadata,
+        )
+
+        stats.items_scored = 1
+        min_score = self.config.pipeline.min_relevance_score
+
+        classified = score_and_classify(
+            item=raw_item,
+            min_score=min_score,
+            topic=self.config.topic,
+        )
+
+        # For direct user custom requests, ensure they are fulfilled even if scoring is modest
+        if not classified:
+            target_db = target_database or classify_database(raw_item, 0.50)
+            topics = extract_matched_topics(
+                text=f"{title} {text}",
+                topic=self.config.topic,
+            )
+            classified = ClassifiedItem(
+                item=raw_item,
+                target_database=target_db,
+                relevance_score=max(min_score, 0.50),
+                topics=topics,
+                summary=text[:250].strip() or title,
+                reasoning="Direct user custom input item.",
+            )
+
+        # Generate Note
+        try:
+            logger.info(f"Synthesizing custom educational note for '{title}'...")
+            note = self.note_generator.generate_note(classified)
+            stats.notes_generated = 1
+        except Exception as exc:
+            err_msg = f"Failed to synthesize custom note for '{title}': {exc}"
+            logger.error(err_msg, exc_info=True)
+            stats.errors.append(err_msg)
+            stats.status = "failed"
+            stats.completed_at = datetime.now(UTC)
+            return stats
+
+        # Publish to Notion
+        db_id = self.config.notion.database_ids.get(note.target_database, "")
+        if not db_id and not effective_dry_run:
+            err_msg = f"Missing database ID for target '{note.target_database.value}'"
+            logger.error(err_msg)
+            stats.errors.append(err_msg)
+            stats.status = "failed"
+            stats.completed_at = datetime.now(UTC)
+            return stats
+
+        try:
+            pub_res = self.notion_client.publish_note(
+                note=note,
+                database_id=db_id,
+                dry_run=effective_dry_run,
+            )
+            if pub_res.get("status") in ("published", "dry_run_success", "skipped_duplicate"):
+                stats.notes_published = 1
+                self.store.mark_processed(
+                    item_id=note.canonical_id,
+                    source_type=note.target_database.value,
+                    canonical_url=note.source_links[0] if note.source_links else "",
+                    title=note.title,
+                    target_database=note.target_database.value,
+                    status=pub_res.get("status", "unknown"),
+                )
+            stats.status = "completed"
+        except Exception as exc:
+            err_msg = f"Failed to publish custom note '{title}': {exc}"
+            logger.error(err_msg, exc_info=True)
+            stats.errors.append(err_msg)
+            stats.status = "failed"
+
+        stats.completed_at = datetime.now(UTC)
+        duration = (stats.completed_at - stats.started_at).total_seconds()
+        logger.info(
+            f"=== Custom Item Pipeline Finished [{run_id}] in {duration:.1f}s | "
+            f"Published: {stats.notes_published}, Status: {stats.status} ==="
+        )
         return stats

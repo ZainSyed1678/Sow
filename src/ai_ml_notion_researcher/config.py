@@ -52,7 +52,7 @@ class PipelineConfig(BaseModel):
     dry_run: bool = True
     max_items_to_score: int = 50
     max_items_to_generate: int = 6
-    min_relevance_score: float = 0.65
+    min_relevance_score: float = 0.40
     request_timeout_seconds: int = 30
     retry_attempts: int = 3
     retry_backoff_factor: float = 2.0
@@ -166,11 +166,14 @@ def load_config(
     dry_run_env = os.getenv("DRY_RUN")
     dry_run = dry_run_env.lower() in ("true", "1", "yes") if dry_run_env else pipe_data.get("dry_run", True)
 
+    min_score_env = os.getenv("MIN_RELEVANCE_SCORE")
+    min_score = float(min_score_env) if min_score_env else float(pipe_data.get("min_relevance_score", 0.40))
+
     pipeline_cfg = PipelineConfig(
         dry_run=dry_run,
         max_items_to_score=int(pipe_data.get("max_items_to_score", 50)),
         max_items_to_generate=int(pipe_data.get("max_items_to_generate", 6)),
-        min_relevance_score=float(pipe_data.get("min_relevance_score", 0.65)),
+        min_relevance_score=min_score,
         request_timeout_seconds=int(pipe_data.get("request_timeout_seconds", 30)),
         retry_attempts=int(pipe_data.get("retry_attempts", 3)),
         retry_backoff_factor=float(pipe_data.get("retry_backoff_factor", 2.0)),

@@ -20,7 +20,7 @@ flowchart LR
 ### The 9-Stage Pipeline
 1. **Multi-Source Collection**: Queries arXiv (`cs.AI`, `cs.LG`, `cs.CL`), AI lab engineering blogs (HuggingFace, OpenAI, DeepMind, BAIR), and GitHub releases (`vLLM`, `transformers`, etc.).
 2. **HTML & Prompt-Injection Defense**: Strips raw HTML and neutralizes adversarial prompt injection patterns (`ignore previous instructions`, `<system>`, etc.).
-3. **Relevance Scoring**: Heuristically scores technical novelty and density (filtering noise below threshold `0.65`).
+3. **Relevance Scoring**: Heuristically scores technical novelty and density (filtering noise below threshold `0.40`, overridable via `--min-score`).
 4. **Dual-Layer Deduplication**:
    - *Layer 1 (Local)*: SQLite database records processed URLs and hashes.
    - *Layer 2 (Remote)*: Notion API query by `Canonical ID` ensures duplicate prevention across ephemeral CI runners.
@@ -85,6 +85,16 @@ python -m ai_ml_notion_researcher.main --dry-run
 **Live Mode (Publishes directly to Notion):**
 ```bash
 python -m ai_ml_notion_researcher.main --live
+```
+
+**Custom Research Topic (e.g. robotics, speech, quantum_ml):**
+```bash
+python -m ai_ml_notion_researcher.main --live --topic "robotics" --min-score 0.35
+```
+
+**Direct Custom Note Generation (On-demand paper or URL):**
+```bash
+python -m ai_ml_notion_researcher.main --live --custom-url "https://arxiv.org/abs/2303.08774" --custom-title "GPT-4 Technical Report"
 ```
 
 **Weekly Synthesis Mode:**

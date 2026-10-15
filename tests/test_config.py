@@ -18,6 +18,7 @@ def test_load_default_config():
     assert config.llm.request_delay_seconds == 5.0
     assert config.pipeline.dry_run is True
     assert config.pipeline.max_items_to_score == 50
+    assert config.pipeline.min_relevance_score == 0.40
     assert len(config.sources.arxiv.categories) >= 3
     assert len(config.sources.rss_feeds.feeds) >= 2
 
@@ -32,6 +33,7 @@ def test_env_override_config():
             "GROQ_MODEL": "llama-3.1-8b-instant",
             "GROQ_API_KEY": "gsk_test_mock_key_12345",
             "GROQ_REQUEST_DELAY_SECONDS": "2.5",
+            "MIN_RELEVANCE_SCORE": "0.35",
             "TOPIC": "quantum_ml",
         },
         clear=True,
@@ -42,6 +44,7 @@ def test_env_override_config():
         assert config.llm.api_key is not None
         assert config.llm.api_key.get_secret_value() == "gsk_test_mock_key_12345"
         assert config.llm.request_delay_seconds == 2.5
+        assert config.pipeline.min_relevance_score == 0.35
         assert config.topic == "quantum_ml"
 
 

@@ -214,3 +214,32 @@ def test_pipeline_rate_limit_pacing(tmp_path: Path):
         assert stats.status == "completed"
         # Verify time.sleep was called with 0.05 for pacing between item 1 and item 2
         mock_sleep.assert_any_call(0.05)
+
+
+def test_pipeline_custom_input_item(tmp_path: Path):
+    store = SQLiteStore(db_path=tmp_path / "test.db")
+    mock_gen = MagicMock(spec=NoteGenerator)
+    mock_gen.generate_note.return_value = _make_dummy_note("custom-1", "Custom Robotics Paper")
+
+    mock_notion = MagicMock(spec=NotionClient)
+    mock_notion.publish_note.return_value = {"status": "dry_run_success"}
+
+    pipeline = ResearchPipeline(
+        config=AppConfig(),
+        store=store,
+        note_generator=mock_gen,
+        notion_client=mock_notion,
+    )
+
+    stats = pipeline.run_custom_item(
+        title="Custom Robotics Paper",
+        url="https://arxiv.org/abs/2401.55555",
+        text="A custom study on quadruped robot locomotion.",
+        target_database=NotionDatabaseType.RESEARCH_PAPERS,
+        dry_run=True,
+    )
+    assert stats.status == "completed"
+    assert stats.items_scored == 1
+    assert stats.notes_generated == 1
+    assert stats.notes_published == 1
+    assert store.is_processed("custom-1")

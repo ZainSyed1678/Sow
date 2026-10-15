@@ -75,7 +75,13 @@ LOW_VALUE_MARKERS = {
 }
 
 
-def compute_relevance_score(title: str, text: str, source_type: SourceType) -> float:
+def compute_relevance_score(
+    title: str,
+    text: str,
+    source_type: SourceType,
+    topic: str | None = None,
+    custom_keywords: list[str] | set[str] | None = None,
+) -> float:
     """Computes a normalized relevance score between 0.0 and 1.0 based on technical signal."""
     combined = f"{title} {text}".lower()
 
@@ -85,10 +91,35 @@ def compute_relevance_score(title: str, text: str, source_type: SourceType) -> f
         return 0.1
 
     # Base score by source authority
-    score = 0.50 if source_type == SourceType.ARXIV else 0.40
+    score = 0.50 if source_type in (SourceType.ARXIV, SourceType.CUSTOM) else 0.30
 
-    # Match core topic keywords
-    keyword_matches = sum(1 for kw in CORE_TOPIC_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", combined))
+    # Build active keyword set from core keywords + custom topic keywords
+    active_keywords = set(CORE_TOPIC_KEYWORDS)
+    if custom_keywords:
+        for ck in custom_keywords:
+            if ck and ck.strip():
+                active_keywords.add(ck.strip().lower())
+
+    topic_matched = False
+    if topic and topic.strip() and topic.strip().lower() != "ai_ml":
+        clean_topic = topic.strip().lower().replace("_", " ").replace("-", " ")
+        active_keywords.add(clean_topic)
+        topic_parts = [p for p in clean_topic.split() if len(p) > 2]
+        for part in topic_parts:
+            active_keywords.add(part)
+            if part.endswith("ics"):
+                active_keywords.add(part[:-3])  # robotics -> robot
+                active_keywords.add(part[:-1])  # robotics -> robotic
+            elif part.endswith("ing"):
+                active_keywords.add(part[:-3])  # reasoning -> reason
+            elif part.endswith("s"):
+                active_keywords.add(part[:-1])
+
+        if any(kw in combined for kw in active_keywords if kw not in CORE_TOPIC_KEYWORDS):
+            topic_matched = True
+
+    # Match active topic keywords
+    keyword_matches = sum(1 for kw in active_keywords if re.search(rf"\b{re.escape(kw)}\b", combined))
     # Add up to 0.35 based on keyword density
     score += min(0.35, keyword_matches * 0.07)
 
@@ -97,9 +128,13 @@ def compute_relevance_score(title: str, text: str, source_type: SourceType) -> f
     score += min(0.15, depth_matches * 0.03)
 
     # Title match bonus (topic present in title is high signal)
-    title_matches = sum(1 for kw in CORE_TOPIC_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", title.lower()))
+    title_matches = sum(1 for kw in active_keywords if re.search(rf"\b{re.escape(kw)}\b", title.lower()))
     if title_matches > 0:
-        score += 0.10
+        score += 0.15
+
+    # Bonus if user-specified custom topic was directly matched
+    if topic_matched:
+        score += 0.15
 
     return min(1.0, max(0.0, round(score, 2)))
 
@@ -108,47 +143,89 @@ def classify_database(item: RawItem, relevance_score: float) -> NotionDatabaseTy
     """Determines the appropriate Notion database destination."""
     combined = f"{item.title} {item.raw_text}".lower()
 
+    # Explicit metadata destination takes priority
+    if "target_database" in item.metadata:
+        try:
+            return NotionDatabaseType(item.metadata["target_database"])
+        except ValueError:
+            pass
+
     if item.source_type == SourceType.ARXIV:
         return NotionDatabaseType.RESEARCH_PAPERS
 
     if item.source_type == SourceType.GITHUB:
         return NotionDatabaseType.TOOLS_FRAMEWORKS
 
-    # RSS feed classification heuristics
-    if any(k in combined for k in ["release", "library", "sdk", "github.com", "framework", "repo", "v0.", "v1."]):
+    # RSS feed or custom entry classification heuristics
+    if any(k in combined for k in ["release", "library", "sdk", "github.com", "framework", "repo", "v0.", "v1.", "tool"]):
         return NotionDatabaseType.TOOLS_FRAMEWORKS
 
-    if any(k in combined for k in ["how it works", "deep dive", "architecture", "under the hood", "guide", "concept"]):
+    if any(k in combined for k in ["how it works", "deep dive", "architecture", "under the hood", "guide", "concept", "tutorial", "explained"]):
         return NotionDatabaseType.CONCEPT_LIBRARY
 
-    if any(k in combined for k in ["paper", "research", "arxiv", "propose", "methodology", "study"]):
+    if any(k in combined for k in ["paper", "research", "arxiv", "propose", "methodology", "study", "dataset"]):
         return NotionDatabaseType.RESEARCH_PAPERS
 
     return NotionDatabaseType.DAILY_BRIEFINGS
 
 
-def extract_matched_topics(text: str) -> list[str]:
+def extract_matched_topics(
+    text: str,
+    topic: str | None = None,
+    custom_keywords: list[str] | None = None,
+) -> list[str]:
     """Extracts detected topic tags from text."""
     lower_text = text.lower()
-    return [
+    active_keywords = set(CORE_TOPIC_KEYWORDS)
+    if custom_keywords:
+        for ck in custom_keywords:
+            if ck and ck.strip():
+                active_keywords.add(ck.strip().lower())
+    if topic and topic.strip() and topic.strip().lower() != "ai_ml":
+        clean_topic = topic.strip().lower().replace("_", " ").replace("-", " ")
+        active_keywords.add(clean_topic)
+
+    matched = [
         kw.title()
-        for kw in CORE_TOPIC_KEYWORDS
+        for kw in active_keywords
         if re.search(rf"\b{re.escape(kw)}\b", lower_text)
-    ][:5]
+    ]
+    # Ensure custom topic is tagged if provided
+    if topic and topic.strip() and topic.strip().lower() != "ai_ml":
+        topic_title = topic.replace("_", " ").replace("-", " ").title()
+        if topic_title not in matched:
+            matched.insert(0, topic_title)
+
+    return matched[:5]
 
 
-def score_and_classify(item: RawItem, min_score: float = 0.65) -> ClassifiedItem | None:
+def score_and_classify(
+    item: RawItem,
+    min_score: float = 0.40,
+    topic: str | None = None,
+    custom_keywords: list[str] | None = None,
+) -> ClassifiedItem | None:
     """Scores an item and assigns it to a target database if it meets the quality threshold."""
-    score = compute_relevance_score(item.title, item.raw_text, item.source_type)
+    score = compute_relevance_score(
+        title=item.title,
+        text=item.raw_text,
+        source_type=item.source_type,
+        topic=topic,
+        custom_keywords=custom_keywords,
+    )
     if score < min_score:
         return None
 
     target_db = classify_database(item, score)
-    topics = extract_matched_topics(f"{item.title} {item.raw_text}")
+    topics = extract_matched_topics(
+        text=f"{item.title} {item.raw_text}",
+        topic=topic,
+        custom_keywords=custom_keywords,
+    )
     summary = item.raw_text[:250].strip() or item.title
 
     reasoning = (
-        f"Scored {score:.2f} due to high keyword alignment and technical depth from {item.source_type.value}."
+        f"Scored {score:.2f} (threshold >= {min_score:.2f}) due to keyword alignment and technical depth from {item.source_type.value}."
     )
 
     return ClassifiedItem(

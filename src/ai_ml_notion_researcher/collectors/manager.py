@@ -84,7 +84,11 @@ class CollectorManager:
         min_score = self.config.pipeline.min_relevance_score
 
         for item in unprocessed_items[: self.config.pipeline.max_items_to_score]:
-            classified_item = score_and_classify(item, min_score=min_score)
+            classified_item = score_and_classify(
+                item=item,
+                min_score=min_score,
+                topic=self.config.topic,
+            )
             if classified_item:
                 classified.append(classified_item)
 
