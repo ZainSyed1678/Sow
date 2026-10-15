@@ -1,0 +1,31 @@
+app:
+  name: "ai-ml-notion-researcher"
+  version: "0.1.0"
+  topic: "ai_ml"
+
+llm:
+  provider: "groq"
+  default_model: "llama-3.3-70b-versatile"
+  temperature: 0.2
+  max_tokens: 4096
+  base_url: "https://api.groq.com/openai/v1"
+  timeout_seconds: 45
+  max_retries: 3
+
+pipeline:
+  dry_run: true
+  max_items_to_score: 50
+  max_items_to_generate: 6
+  min_relevance_score: 0.65
+  request_timeout_seconds: 30
+  retry_attempts: 3
+  retry_backoff_factor: 2.0
+  user_agent: "AIMLNotionResearcher/0.1.0 (+https://github.com)"
+
+storage:
+  sqlite_path: "local_state/researcher.db"
+
+notion:
+  api_version: "2022-06-28"
+  base_url: "https://api.notion.com/v1"
+  rate_limit_requests_per_second: 3

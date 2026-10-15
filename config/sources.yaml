@@ -1,0 +1,46 @@
+topic: "ai_ml"
+
+arxiv:
+  enabled: true
+  categories:
+    - "cs.AI"
+    - "cs.LG"
+    - "cs.CL"
+    - "cs.CV"
+  max_results_per_category: 15
+  sort_by: "submittedDate"
+  sort_order: "descending"
+
+rss_feeds:
+  enabled: true
+  feeds:
+    - name: "Hugging Face Blog"
+      url: "https://huggingface.co/blog/feed.xml"
+      category: "tools_frameworks"
+    - name: "OpenAI Research"
+      url: "https://openai.com/news/rss.xml"
+      category: "research_papers"
+    - name: "Google DeepMind"
+      url: "https://deepmind.google/blog/rss.xml"
+      category: "research_papers"
+    - name: "Berkeley AI Research (BAIR)"
+      url: "https://bair.berkeley.edu/blog/feed.xml"
+      category: "research_papers"
+    - name: "MIT Tech Review - AI"
+      url: "https://www.technologyreview.com/feed/topic/artificial-intelligence"
+      category: "daily_briefings"
+
+github:
+  enabled: true
+  topics:
+    - "large-language-models"
+    - "llm"
+    - "generative-ai"
+    - "machine-learning"
+  tracked_repos:
+    - "vllm-project/vllm"
+    - "huggingface/transformers"
+    - "pytorch/pytorch"
+    - "ollama/ollama"
+    - "microsoft/semantic-kernel"
+  min_stars_daily: 20
