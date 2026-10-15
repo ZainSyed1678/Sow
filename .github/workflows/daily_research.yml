@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: '0.40'
+      concept:
+        description: 'Direct topic/concept to generate (no research paper needed, e.g. Mixture of Experts)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   research-and-publish:
@@ -122,6 +127,10 @@ jobs:
 
           if [ -n "${{ github.event.inputs.custom_title }}" ]; then
             CMD_ARGS="$CMD_ARGS --custom-title '${{ github.event.inputs.custom_title }}'"
+          fi
+
+          if [ -n "${{ github.event.inputs.concept }}" ]; then
+            CMD_ARGS="$CMD_ARGS --concept '${{ github.event.inputs.concept }}'"
           fi
 
           echo "Executing: python -m ai_ml_notion_researcher.main $CMD_ARGS"

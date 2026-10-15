@@ -1,6 +1,7 @@
 """Main entrypoint for AI/ML Notion Researcher."""
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -20,6 +21,12 @@ def main() -> int:
     parser.add_argument("--weekly", action="store_true", help="Run weekly review synthesis instead of daily research")
     parser.add_argument("--topic", type=str, default=None, help="Research topic (default: ai_ml)")
     parser.add_argument("--min-score", type=float, default=None, help="Minimum relevance score threshold (0.0 to 1.0)")
+    parser.add_argument(
+        "--concept",
+        type=str,
+        default=None,
+        help="Directly generate a concept reference note for a topic (no research paper required)",
+    )
     parser.add_argument("--custom-url", type=str, default=None, help="Directly generate a note for a custom URL")
     parser.add_argument("--custom-title", type=str, default=None, help="Title for the custom input item")
     parser.add_argument("--custom-text", type=str, default="", help="Optional abstract or text for custom input")
@@ -77,7 +84,20 @@ def main() -> int:
 
     pipeline = ResearchPipeline(config=config)
 
-    if args.custom_url or args.custom_title:
+    if args.concept:
+        concept_title = args.concept.strip()
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", concept_title.lower()).strip("-")
+        url = f"topic://concept_library/{slug}"
+        target_db = NotionDatabaseType(args.custom_db) if args.custom_db else NotionDatabaseType.CONCEPT_LIBRARY
+        logger.info(f"Generating concept reference guide for topic '{concept_title}'...")
+        stats = pipeline.run_custom_item(
+            title=concept_title,
+            url=url,
+            text=args.custom_text or "",
+            target_database=target_db,
+            dry_run=dry_run,
+        )
+    elif args.custom_url or args.custom_title:
         url = args.custom_url or f"https://custom-entry.local/{args.custom_title.lower().replace(' ', '-')}"
         title = args.custom_title or args.custom_url
         logger.info(f"Processing direct custom input note for '{title}'...")

@@ -88,6 +88,26 @@ def build_note_generation_prompt(
     authors: list[str] | None = None,
 ) -> str:
     """Builds a protected prompt isolating untrusted source content inside xml tags."""
+    # Direct concept/topic guide request (no external paper required)
+    if source_url.startswith("topic://") or (source_type == "custom" and not raw_content):
+        return f"""Please generate a comprehensive, authoritative educational reference note for the following AI/ML concept/topic:
+
+Concept / Topic: {title}
+
+Requirements:
+- Layman explanation with intuitive real-world analogy.
+- Rigorous technical deep-dive into mathematical foundations, formulation, and algorithmic mechanics.
+- Detailed step-by-step mechanism from first principles.
+- Valid Mermaid flowchart architecture diagram.
+- Real-world production use cases in state-of-the-art AI systems.
+- Technologies, libraries, and framework interactions across the stack (e.g. PyTorch, Hugging Face, vLLM).
+- Critical trade-offs: concrete advantages, bottlenecks, and failure modes.
+- Practical, copy-pasteable Python implementation or experiment.
+- High-yield senior/staff ML interview Q&As.
+
+Return ONLY the JSON object conforming to the schema.
+"""
+
     authors_str = ", ".join(authors) if authors else "Unknown"
     return f"""Please generate a detailed educational note based strictly on the following source:
 
