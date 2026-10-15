@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, TypeVar
 
@@ -93,9 +94,20 @@ class GroqClient(BaseLLMClient):
                             "Groq API rate limit exceeded after maximum retries.",
                         )
                     retry_after = resp.headers.get("Retry-After")
-                    sleep_time = float(retry_after) if retry_after else (backoff ** attempt)
+                    sleep_time = float(retry_after) if retry_after else 0.0
+
+                    # Parse 'Please try again in X.Xs' from error message if available
+                    if sleep_time <= 0:
+                        match = re.search(r"try again in (\d+(?:\.\d+)?)s", resp.text)
+                        if match:
+                            sleep_time = float(match.group(1)) + 0.5
+
+                    # Fallback to exponential backoff with a 5.0s minimum floor
+                    if sleep_time <= 0:
+                        sleep_time = max(backoff ** attempt, 5.0)
+
                     logger.warning(
-                        "Groq rate limit (429) hit. Backing off...",
+                        f"Groq rate limit (429) hit. Backing off for {sleep_time:.2f}s...",
                         extra={"attempt": attempt, "sleep_time": sleep_time},
                     )
                     time.sleep(sleep_time)

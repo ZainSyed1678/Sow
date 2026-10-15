@@ -31,14 +31,16 @@ class GithubCollector(BaseCollector):
         self.config = config
         self.base_url = "https://api.github.com"
 
-    def get_headers(self) -> dict[str, str]:
+    def get_headers(self, with_auth: bool = True) -> dict[str, str]:
         headers = {
             "Accept": "application/vnd.github+json",
             "User-Agent": self.user_agent,
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        if self.config.api_token and self.config.api_token.get_secret_value().strip():
-            headers["Authorization"] = f"Bearer {self.config.api_token.get_secret_value()}"
+        if with_auth and self.config.api_token:
+            token = self.config.api_token.get_secret_value().strip()
+            if token and not token.lower().startswith(("your_", "ghp_your", "token_here", "none")):
+                headers["Authorization"] = f"Bearer {token}"
         return headers
 
     def collect(self) -> list[RawItem]:
@@ -69,6 +71,9 @@ class GithubCollector(BaseCollector):
     def _fetch_latest_release(self, http: Any, repo_full_name: str) -> RawItem | None:
         url = f"{self.base_url}/repos/{repo_full_name}/releases/latest"
         resp = http.get(url, headers=self.get_headers())
+        if resp.status_code == 401:
+            # Token was invalid; fallback gracefully to unauthenticated public request
+            resp = http.get(url, headers=self.get_headers(with_auth=False))
         if resp.status_code == 404:
             # Repo has no formal releases
             return None
@@ -104,6 +109,9 @@ class GithubCollector(BaseCollector):
         query = f"topic:{topic} stars:>={self.config.min_stars_daily}"
         url = f"{self.base_url}/search/repositories?q={query}&sort=updated&order=desc&per_page=5"
         resp = http.get(url, headers=self.get_headers())
+        if resp.status_code == 401:
+            # Token was invalid; fallback gracefully to unauthenticated public request
+            resp = http.get(url, headers=self.get_headers(with_auth=False))
         resp.raise_for_status()
 
         data = resp.json()

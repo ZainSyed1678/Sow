@@ -14,7 +14,8 @@ def test_load_default_config():
 
     assert config.topic == "ai_ml"
     assert config.llm.provider == "groq"
-    assert config.llm.model == "llama-3.3-70b-versatile"
+    assert config.llm.model == "openai/gpt-oss-120b"
+    assert config.llm.request_delay_seconds == 5.0
     assert config.pipeline.dry_run is True
     assert config.pipeline.max_items_to_score == 50
     assert len(config.sources.arxiv.categories) >= 3
@@ -30,6 +31,7 @@ def test_env_override_config():
             "DRY_RUN": "false",
             "GROQ_MODEL": "llama-3.1-8b-instant",
             "GROQ_API_KEY": "gsk_test_mock_key_12345",
+            "GROQ_REQUEST_DELAY_SECONDS": "2.5",
             "TOPIC": "quantum_ml",
         },
         clear=True,
@@ -39,6 +41,7 @@ def test_env_override_config():
         assert config.llm.model == "llama-3.1-8b-instant"
         assert config.llm.api_key is not None
         assert config.llm.api_key.get_secret_value() == "gsk_test_mock_key_12345"
+        assert config.llm.request_delay_seconds == 2.5
         assert config.topic == "quantum_ml"
 
 

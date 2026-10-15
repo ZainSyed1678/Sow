@@ -1,5 +1,6 @@
 """Complete autonomous research and publishing pipeline with dry-run and error isolation."""
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -90,7 +91,13 @@ class ResearchPipeline:
         generated_notes: list[EducationalNote] = []
 
         # 2. LLM Note Synthesis (Error isolated per item)
-        for classified in prioritized_items:
+        for idx, classified in enumerate(prioritized_items):
+            if idx > 0 and self.config.llm.request_delay_seconds > 0:
+                logger.info(
+                    f"Pacing LLM requests ({self.config.llm.request_delay_seconds:.1f}s delay) to avoid rate limits..."
+                )
+                time.sleep(self.config.llm.request_delay_seconds)
+
             try:
                 note = self.note_generator.generate_note(classified)
                 generated_notes.append(note)
@@ -102,7 +109,11 @@ class ResearchPipeline:
                 continue
 
         # 3. Notion Publication (Error isolated per note)
-        for note in generated_notes:
+        for idx, note in enumerate(generated_notes):
+            if idx > 0 and not effective_dry_run:
+                # Proactively space out Notion requests to respect 3 requests/sec rate limit
+                time.sleep(0.35)
+
             db_id = self.config.notion.database_ids.get(note.target_database, "")
             if not db_id and not effective_dry_run:
                 err_msg = f"Missing database ID for target '{note.target_database.value}'"
@@ -167,7 +178,9 @@ class ResearchPipeline:
         if not notes:
             prioritized = self.collector_manager.collect_and_prioritize()
             notes = []
-            for item in prioritized[:4]:
+            for idx, item in enumerate(prioritized[:4]):
+                if idx > 0 and self.config.llm.request_delay_seconds > 0:
+                    time.sleep(self.config.llm.request_delay_seconds)
                 try:
                     notes.append(self.note_generator.generate_note(item))
                 except Exception as exc:
@@ -180,6 +193,9 @@ class ResearchPipeline:
             return stats
 
         try:
+            if self.config.llm.request_delay_seconds > 0:
+                time.sleep(self.config.llm.request_delay_seconds)
+
             weekly_note = self.note_generator.generate_weekly_review(
                 notes=notes,
                 week_start=week_start,

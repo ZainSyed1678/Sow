@@ -1,7 +1,7 @@
 """End-to-end unit tests for ResearchPipeline and dry-run guarantees."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from ai_ml_notion_researcher.collectors.manager import CollectorManager
 from ai_ml_notion_researcher.config import AppConfig
@@ -179,3 +179,38 @@ def test_pipeline_weekly_review(tmp_path: Path):
     assert stats.notes_generated == 1
     assert stats.notes_published == 1
     mock_notion.publish_weekly_review.assert_called_once()
+
+
+def test_pipeline_rate_limit_pacing(tmp_path: Path):
+    store = SQLiteStore(db_path=tmp_path / "test.db")
+    mock_mgr = MagicMock(spec=CollectorManager)
+    mock_mgr.collect_and_prioritize.return_value = [
+        _make_dummy_classified("item1", "Paper 1"),
+        _make_dummy_classified("item2", "Paper 2"),
+    ]
+
+    mock_gen = MagicMock(spec=NoteGenerator)
+    mock_gen.generate_note.side_effect = [
+        _make_dummy_note("item1", "Paper 1"),
+        _make_dummy_note("item2", "Paper 2"),
+    ]
+
+    mock_notion = MagicMock(spec=NotionClient)
+    mock_notion.publish_note.return_value = {"status": "dry_run_success"}
+
+    app_cfg = AppConfig()
+    app_cfg.llm.request_delay_seconds = 0.05
+
+    pipeline = ResearchPipeline(
+        config=app_cfg,
+        store=store,
+        collector_manager=mock_mgr,
+        note_generator=mock_gen,
+        notion_client=mock_notion,
+    )
+
+    with patch("time.sleep") as mock_sleep:
+        stats = pipeline.run(dry_run=True)
+        assert stats.status == "completed"
+        # Verify time.sleep was called with 0.05 for pacing between item 1 and item 2
+        mock_sleep.assert_any_call(0.05)

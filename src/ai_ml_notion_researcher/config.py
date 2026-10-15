@@ -19,13 +19,14 @@ from ai_ml_notion_researcher.models import NotionDatabaseType
 class LLMConfig(BaseModel):
     """Configuration for the LLM provider."""
     provider: str = "groq"
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     api_key: SecretStr | None = None
     temperature: float = 0.2
     max_tokens: int = 4096
     base_url: str = "https://api.groq.com/openai/v1"
     timeout_seconds: int = 45
     max_retries: int = 3
+    request_delay_seconds: float = 0.0
 
 
 class NotionConfig(BaseModel):
@@ -179,7 +180,9 @@ def load_config(
     # 2. LLM Config
     llm_data = settings_data.get("llm", {})
     groq_api_key = os.getenv("GROQ_API_KEY")
-    groq_model = os.getenv("GROQ_MODEL", llm_data.get("default_model", "llama-3.3-70b-versatile"))
+    groq_model = os.getenv("GROQ_MODEL", llm_data.get("default_model", "openai/gpt-oss-120b"))
+    groq_delay = os.getenv("GROQ_REQUEST_DELAY_SECONDS")
+    request_delay = float(groq_delay) if groq_delay else float(llm_data.get("request_delay_seconds", 5.0))
 
     llm_cfg = LLMConfig(
         provider=llm_data.get("provider", "groq"),
@@ -190,6 +193,7 @@ def load_config(
         base_url=llm_data.get("base_url", "https://api.groq.com/openai/v1"),
         timeout_seconds=int(llm_data.get("timeout_seconds", 45)),
         max_retries=int(llm_data.get("max_retries", 3)),
+        request_delay_seconds=request_delay,
     )
 
     # 3. Notion Config

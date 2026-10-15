@@ -5,12 +5,13 @@ app:
 
 llm:
   provider: "groq"
-  default_model: "llama-3.3-70b-versatile"
+  default_model: "openai/gpt-oss-120b"
   temperature: 0.2
   max_tokens: 4096
   base_url: "https://api.groq.com/openai/v1"
   timeout_seconds: 45
   max_retries: 3
+  request_delay_seconds: 5.0
 
 pipeline:
   dry_run: true
