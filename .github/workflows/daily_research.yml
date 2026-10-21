@@ -95,6 +95,12 @@ jobs:
 
       - name: Run Daily Research Pipeline
         env:
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          INPUT_TOPIC: ${{ github.event.inputs.topic }}
+          INPUT_MIN_SCORE: ${{ github.event.inputs.min_score }}
+          INPUT_CUSTOM_URL: ${{ github.event.inputs.custom_url }}
+          INPUT_CUSTOM_TITLE: ${{ github.event.inputs.custom_title }}
+          INPUT_CONCEPT: ${{ github.event.inputs.concept }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GROQ_MODEL: "openai/gpt-oss-120b"
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
@@ -106,32 +112,32 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
           LOG_LEVEL: "INFO"
         run: |
-          CMD_ARGS=""
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            CMD_ARGS="--dry-run"
+          CMD_ARGS=()
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD_ARGS+=("--dry-run")
           else
-            CMD_ARGS="--live"
+            CMD_ARGS+=("--live")
           fi
 
-          if [ -n "${{ github.event.inputs.topic }}" ]; then
-            CMD_ARGS="$CMD_ARGS --topic '${{ github.event.inputs.topic }}'"
+          if [ -n "$INPUT_TOPIC" ]; then
+            CMD_ARGS+=("--topic" "$INPUT_TOPIC")
           fi
 
-          if [ -n "${{ github.event.inputs.min_score }}" ]; then
-            CMD_ARGS="$CMD_ARGS --min-score ${{ github.event.inputs.min_score }}"
+          if [ -n "$INPUT_MIN_SCORE" ]; then
+            CMD_ARGS+=("--min-score" "$INPUT_MIN_SCORE")
           fi
 
-          if [ -n "${{ github.event.inputs.custom_url }}" ]; then
-            CMD_ARGS="$CMD_ARGS --custom-url '${{ github.event.inputs.custom_url }}'"
+          if [ -n "$INPUT_CUSTOM_URL" ]; then
+            CMD_ARGS+=("--custom-url" "$INPUT_CUSTOM_URL")
           fi
 
-          if [ -n "${{ github.event.inputs.custom_title }}" ]; then
-            CMD_ARGS="$CMD_ARGS --custom-title '${{ github.event.inputs.custom_title }}'"
+          if [ -n "$INPUT_CUSTOM_TITLE" ]; then
+            CMD_ARGS+=("--custom-title" "$INPUT_CUSTOM_TITLE")
           fi
 
-          if [ -n "${{ github.event.inputs.concept }}" ]; then
-            CMD_ARGS="$CMD_ARGS --concept '${{ github.event.inputs.concept }}'"
+          if [ -n "$INPUT_CONCEPT" ]; then
+            CMD_ARGS+=("--concept" "$INPUT_CONCEPT")
           fi
 
-          echo "Executing: python -m ai_ml_notion_researcher.main $CMD_ARGS"
-          python -m ai_ml_notion_researcher.main $CMD_ARGS
+          echo "Executing pipeline with arguments: ${CMD_ARGS[*]}"
+          python -m ai_ml_notion_researcher.main "${CMD_ARGS[@]}"
