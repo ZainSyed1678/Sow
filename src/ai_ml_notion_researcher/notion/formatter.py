@@ -13,6 +13,7 @@ from ai_ml_notion_researcher.notion.blocks import (
     create_heading_3,
     create_numbered_item,
     create_paragraph,
+    is_valid_notion_url,
 )
 
 
@@ -84,7 +85,11 @@ def build_educational_note_blocks(note: EducationalNote) -> list[dict[str, Any]]
         blocks.append(create_divider())
         blocks.append(create_heading_2("Original Sources & Research"))
         for link in note.source_links:
-            blocks.append(create_paragraph(link, link_url=link))
+            clean_link = link.strip()
+            if is_valid_notion_url(clean_link):
+                blocks.append(create_paragraph(clean_link, link_url=clean_link))
+            elif clean_link:
+                blocks.append(create_paragraph(f"Reference: {clean_link}"))
 
     return blocks
 
@@ -117,7 +122,11 @@ def build_weekly_review_blocks(review: WeeklyReviewNote) -> list[dict[str, Any]]
         blocks.append(create_divider())
         blocks.append(create_heading_2("References & Source Papers"))
         for link in review.source_links:
-            blocks.append(create_paragraph(link, link_url=link))
+            clean_link = link.strip()
+            if is_valid_notion_url(clean_link):
+                blocks.append(create_paragraph(clean_link, link_url=clean_link))
+            elif clean_link:
+                blocks.append(create_paragraph(f"Reference: {clean_link}"))
 
     return blocks
 
@@ -153,8 +162,8 @@ def build_page_properties(
             props["Canonical ID"] = {"rich_text": chunk_rich_text(canonical_id)}
         if summary:
             props["Summary"] = {"rich_text": chunk_rich_text(summary[:1800])}
-        if source_url:
-            props["URL"] = {"url": source_url}
+        if source_url and is_valid_notion_url(source_url):
+            props["URL"] = {"url": source_url.strip()}
         if published_date:
             props["Date"] = {"date": {"start": published_date}}
         if tags:
@@ -182,7 +191,8 @@ def build_page_properties(
     # URL / Source
     matched = find_prop("URL") or find_prop("Source") or find_prop("Link")
     if matched and matched[1] == "url" and source_url:
-        props[matched[0]] = {"url": source_url}
+        if is_valid_notion_url(source_url):
+            props[matched[0]] = {"url": source_url.strip()}
 
     # Date / Published Date
     matched = find_prop("Date") or find_prop("Published") or find_prop("Created")

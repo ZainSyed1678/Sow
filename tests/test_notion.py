@@ -16,6 +16,7 @@ from ai_ml_notion_researcher.notion.blocks import (
     chunk_blocks,
     chunk_rich_text,
     create_paragraph,
+    is_valid_notion_url,
 )
 from ai_ml_notion_researcher.notion.client import (
     NotionClient,
@@ -237,3 +238,60 @@ def test_client_permission_denied():
 
     assert is_valid is False
     assert "permission denied" in msg.lower()
+
+
+def test_is_valid_notion_url():
+    assert is_valid_notion_url("https://en.wikipedia.org/wiki/Cloud_computing") is True
+    assert is_valid_notion_url("http://arxiv.org/abs/2103.00020") is True
+    assert is_valid_notion_url("https://custom-entry.local/test") is True
+    # Invalid schemes or malformed URIs that Notion rejects
+    assert is_valid_notion_url("topic://concept_library/cloud-computing") is False
+    assert is_valid_notion_url("file:///etc/passwd") is False
+    assert is_valid_notion_url("cloud-computing") is False
+    assert is_valid_notion_url("https://") is False
+    assert is_valid_notion_url("") is False
+    assert is_valid_notion_url(None) is False
+
+
+def test_chunk_rich_text_url_sanitization():
+    # Valid URL retains link
+    valid_chunks = chunk_rich_text("Click here", link_url="https://example.com")
+    assert len(valid_chunks) == 1
+    assert valid_chunks[0]["text"]["link"] == {"url": "https://example.com"}
+
+    # Invalid pseudo URL strips link so Notion does not 400
+    invalid_chunks = chunk_rich_text("Topic link", link_url="topic://concept_library/test")
+    assert len(invalid_chunks) == 1
+    assert "link" not in invalid_chunks[0]["text"]
+
+
+def test_build_educational_note_blocks_pseudo_url(sample_educational_note: EducationalNote):
+    sample_educational_note.source_links = ["topic://concept_library/cloud-computing"]
+    blocks = build_educational_note_blocks(sample_educational_note)
+
+    # Find the reference block
+    ref_blocks = [b for b in blocks if "cloud-computing" in str(b)]
+    assert len(ref_blocks) == 1
+    rich_text = ref_blocks[0]["paragraph"]["rich_text"]
+    # Ensure no invalid link object was attached
+    assert all("link" not in item["text"] for item in rich_text)
+    assert "Reference: topic://concept_library/cloud-computing" in rich_text[0]["text"]["content"]
+
+
+def test_build_page_properties_url_sanitization():
+    # Invalid pseudo-url is filtered out of Notion page properties
+    props_invalid = build_page_properties(
+        title="Test",
+        canonical_id="123",
+        source_url="topic://concept_library/test",
+    )
+    assert "URL" not in props_invalid
+
+    # Valid url is preserved
+    props_valid = build_page_properties(
+        title="Test",
+        canonical_id="123",
+        source_url="https://en.wikipedia.org/wiki/Test",
+    )
+    assert props_valid["URL"] == {"url": "https://en.wikipedia.org/wiki/Test"}
+

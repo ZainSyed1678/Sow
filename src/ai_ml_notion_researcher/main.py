@@ -3,6 +3,7 @@
 import argparse
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 
 from ai_ml_notion_researcher.config import load_config
@@ -87,7 +88,8 @@ def main() -> int:
     if args.concept:
         concept_title = args.concept.strip()
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", concept_title.lower()).strip("-")
-        url = f"topic://concept_library/{slug}"
+        wiki_title = urllib.parse.quote(concept_title.replace(" ", "_"))
+        url = args.custom_url or f"https://en.wikipedia.org/wiki/{wiki_title}"
         target_db = NotionDatabaseType(args.custom_db) if args.custom_db else NotionDatabaseType.CONCEPT_LIBRARY
         logger.info(f"Generating concept reference guide for topic '{concept_title}'...")
         stats = pipeline.run_custom_item(
@@ -98,8 +100,12 @@ def main() -> int:
             dry_run=dry_run,
         )
     elif args.custom_url or args.custom_title:
-        url = args.custom_url or f"https://custom-entry.local/{args.custom_title.lower().replace(' ', '-')}"
-        title = args.custom_title or args.custom_url
+        custom_url = (args.custom_url or "").strip()
+        if custom_url and not (custom_url.startswith("http://") or custom_url.startswith("https://")):
+            custom_url = f"https://{custom_url}"
+        title = args.custom_title or custom_url or "Custom Topic"
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", title.lower()).strip("-")
+        url = custom_url or f"https://custom-entry.local/{slug}"
         logger.info(f"Processing direct custom input note for '{title}'...")
         target_db = NotionDatabaseType(args.custom_db) if args.custom_db else None
         stats = pipeline.run_custom_item(

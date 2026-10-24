@@ -1,6 +1,7 @@
 """Notion block construction utilities with payload sanitization and length limits."""
 
 from typing import Any
+from urllib.parse import urlparse
 
 # Notion enforces a 2000-character maximum per rich_text item
 MAX_TEXT_LENGTH = 1900
@@ -8,18 +9,40 @@ MAX_TEXT_LENGTH = 1900
 MAX_BLOCKS_PER_REQUEST = 100
 
 
+def is_valid_notion_url(url: str | None) -> bool:
+    """Validates whether a URL is a well-formed HTTP/HTTPS URL accepted by Notion API.
+
+    Notion strictly requires links and URL properties to be valid HTTP or HTTPS
+    URLs with a non-empty network location (domain). Pseudo-schemes like 'topic://'
+    or malformed links cause Notion HTTP 400 validation errors.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    url = url.strip()
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
 def chunk_rich_text(text: str, link_url: str | None = None) -> list[dict[str, Any]]:
     """Splits string into chunks conforming to Notion's 2000 character rich text limit."""
     if not text:
         return []
+
+    # Only attach link object if link_url conforms to Notion's required HTTP/HTTPS URL format
+    valid_link = link_url.strip() if (link_url and is_valid_notion_url(link_url)) else None
 
     chunks: list[dict[str, Any]] = []
     start = 0
     while start < len(text):
         chunk = text[start : start + MAX_TEXT_LENGTH]
         text_obj: dict[str, Any] = {"content": chunk}
-        if link_url:
-            text_obj["link"] = {"url": link_url}
+        if valid_link:
+            text_obj["link"] = {"url": valid_link}
 
         chunks.append({
             "type": "text",
